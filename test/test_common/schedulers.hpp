@@ -194,12 +194,16 @@ struct error_scheduler {
 
   error_scheduler() = default;
 
-  explicit error_scheduler(E err)
+  error_scheduler(E err)
     : err_((E&&) err) {
   }
 
-  error_scheduler(const error_scheduler&) noexcept = default;
-  error_scheduler(error_scheduler&&) noexcept = default;
+  error_scheduler(error_scheduler&& that) noexcept = default;
+
+  error_scheduler(const error_scheduler& that) noexcept
+    : err_(that.err_) {
+  }
+
  private:
   template <typename R>
   struct oper : immovable {

@@ -1009,7 +1009,7 @@ namespace stdexec {
     struct sender_transform_t {
       template <class _Value, class _Env = no_env>
         requires tag_invocable<sender_transform_t, __env_domain_t<_Env, _Value>, _Value, const _Env&>
-      constexpr auto operator()(_Value __val, const _Env& __env = {}) const noexcept(
+      constexpr auto operator()(_Value&& __val, const _Env& __env = {}) const noexcept(
         nothrow_tag_invocable<sender_transform_t, __env_domain_t<_Env, _Value>, _Value, const _Env&>)
         -> tag_invoke_result_t<sender_transform_t, __env_domain_t<_Env, _Value>, _Value, const _Env&> {
         static_assert(sizeof(_Value), "Incomplete type used with sender_transform");
@@ -1019,7 +1019,7 @@ namespace stdexec {
       }
 
       template <class _Value, class _Env = no_env>
-      constexpr _Value operator()(_Value&& __val, const _Env& __env = {}) const noexcept {
+      constexpr _Value&& operator()(_Value&& __val, const _Env& __env = {}) const noexcept {
         static_assert(sizeof(_Value), "Incomplete type used with sender_transform");
         static_assert(sizeof(_Env), "Incomplete type used with sender_transform");
         return (_Value&&) __val;
@@ -1030,6 +1030,9 @@ namespace stdexec {
   using __sndr_tfx::sender_transform_t;
   inline constexpr sender_transform_t sender_transform{};
 
+  template <class _Value, class _Env = no_env>
+  using sender_transform_result_t = __call_result_t<sender_transform_t, _Value, _Env>;
+
   /////////////////////////////////////////////////////////////////////////////
   // [execution.sndtraits]
   namespace __get_completion_signatures {
@@ -1037,17 +1040,17 @@ namespace stdexec {
     concept __r7_style_sender = same_as<_Env, no_env> && enable_sender<__decay_t<_Sender>>;
 
     template <class _Sender, class _Env>
-    using __tfx_sender = __call_result_t<sender_transform_t, _Sender, _Env>;
+    concept __with_tag_invoke = //
+      tag_invocable<
+        get_completion_signatures_t,
+        sender_transform_result_t<_Sender, _Env>,
+        _Env>;
 
     template <class _Sender, class _Env>
-    concept __with_tag_invoke =
-      __valid<tag_invoke_result_t, get_completion_signatures_t, __tfx_sender<_Sender, _Env>, _Env>;
+    using __member_alias_t = //
+      typename __decay_t<sender_transform_result_t<_Sender, _Env>>::completion_signatures;
 
-    template <class _Sender, class _Env>
-    using __member_alias_t =
-      typename __decay_t<__tfx_sender<_Sender, _Env>>::completion_signatures;
-
-    template <class _Sender, class _Env>
+    template <class _Sender, class _Env = no_env>
     concept __with_member_alias = __valid<__member_alias_t, _Sender, _Env>;
 
     struct get_completion_signatures_t {
@@ -1757,11 +1760,23 @@ namespace stdexec {
     }
 
     template <class _Sender, class _Receiver>
-    concept __connectable_with_tag_invoke =
+    using __tfx_sender = //
+      sender_transform_result_t<_Sender, env_of_t<_Receiver&>>;
+
+    template <class _Sender, class _Receiver>
+    concept __connectable_with_tag_invoke_ =     //
       receiver<_Receiver> &&                     //
       sender_in<_Sender, env_of_t<_Receiver>> && //
       __receiver_from<_Receiver, _Sender> &&     //
       tag_invocable<connect_t, _Sender, _Receiver>;
+
+    template <class _Sender, class _Receiver>
+    concept __connectable_with_tag_invoke = //
+      __connectable_with_tag_invoke_<__tfx_sender<_Sender, _Receiver>, _Receiver>;
+
+    template <class _Sender, class _Receiver>
+    concept __connectable_with_co_await = //
+      __callable<__connect_awaitable_t, __tfx_sender<_Sender, _Receiver>, _Receiver>;
 
     struct connect_t {
       template <class _Sender, class _Receiver>
@@ -1773,15 +1788,22 @@ namespace stdexec {
         if constexpr (!enable_receiver<__decay_t<_Receiver>>)
           __update_receiver_type_to_p2300r7_by_adding_enable_receiver_trait< __decay_t<_Receiver>>();
 
+        constexpr bool _NothrowTfxSender =
+          __nothrow_callable<get_env_t, _Receiver&> &&
+          __nothrow_callable<sender_transform_t, _Sender, env_of_t<_Receiver&>>;
+        using _TfxSender = __tfx_sender<_Sender, _Receiver&>;
+
         if constexpr (__connectable_with_tag_invoke<_Sender, _Receiver>) {
-          using _Result = tag_invoke_result_t<connect_t, _Sender, _Receiver>;
-          constexpr bool _Nothrow = nothrow_tag_invocable<connect_t, _Sender, _Receiver>;
+          using _Result = tag_invoke_result_t<connect_t, _TfxSender, _Receiver>;
+          constexpr bool _Nothrow = //
+            _NothrowTfxSender && nothrow_tag_invocable<connect_t, _TfxSender, _Receiver>;
           return static_cast<_Result (*)() noexcept(_Nothrow)>(nullptr);
-        } else if constexpr (__callable<__connect_awaitable_t, _Sender, _Receiver>) {
-          using _Result = __call_result_t<__connect_awaitable_t, _Sender, _Receiver>;
+        } else if constexpr (__connectable_with_co_await<_Sender, _Receiver>) {
+          using _Result = __call_result_t<__connect_awaitable_t, _TfxSender, _Receiver>;
           return static_cast<_Result (*)()>(nullptr);
         } else {
-          return static_cast<__debug::__debug_operation (*)() noexcept>(nullptr);
+          using _Result = __debug::__debug_operation;
+          return static_cast<_Result (*)() noexcept(_NothrowTfxSender)>(nullptr);
         }
       }
 
@@ -1790,24 +1812,32 @@ namespace stdexec {
 
       template <sender _Sender, receiver _Receiver>
         requires __connectable_with_tag_invoke<_Sender, _Receiver>
-              || __callable<__connect_awaitable_t, _Sender, _Receiver>
+              || __connectable_with_co_await<_Sender, _Receiver>
               || __is_debug_env<env_of_t<_Receiver>>
       auto operator()(_Sender&& __sndr, _Receiver&& __rcvr) const
         noexcept(__nothrow_callable<__select_impl_t<_Sender, _Receiver>>)
           -> __call_result_t<__select_impl_t<_Sender, _Receiver>> {
+        using _TfxSender = __tfx_sender<_Sender, _Receiver&>;
+        auto&& __env = get_env(__rcvr);
+
         if constexpr (__connectable_with_tag_invoke<_Sender, _Receiver>) {
           static_assert(
-            operation_state<tag_invoke_result_t<connect_t, _Sender, _Receiver>>,
+            operation_state<tag_invoke_result_t<connect_t, _TfxSender, _Receiver>>,
             "stdexec::connect(sender, receiver) must return a type that "
             "satisfies the operation_state concept");
-          return tag_invoke(connect_t{}, (_Sender&&) __sndr, (_Receiver&&) __rcvr);
-        } else if constexpr (__callable<__connect_awaitable_t, _Sender, _Receiver>) {
-          return __connect_awaitable((_Sender&&) __sndr, (_Receiver&&) __rcvr);
+          return tag_invoke(
+            connect_t{},
+            sender_transform((_Sender&&) __sndr, __env),
+            (_Receiver&&) __rcvr);
+        } else if constexpr (__connectable_with_co_await<_Sender, _Receiver>) {
+          return __connect_awaitable( //
+            sender_transform((_Sender&&) __sndr, __env),
+            (_Receiver&&) __rcvr);
         } else {
-          // This should generate an instantiate backtrace that contains useful
+          // This should generate an instantiation backtrace that contains useful
           // debugging information.
           using __tag_invoke::tag_invoke;
-          tag_invoke(*this, (_Sender&&) __sndr, (_Receiver&&) __rcvr);
+          tag_invoke(*this, sender_transform((_Sender&&) __sndr, __env), (_Receiver&&) __rcvr);
         }
       }
 
