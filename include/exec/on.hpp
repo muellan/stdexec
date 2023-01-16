@@ -101,9 +101,10 @@ namespace exec {
       }
 
       template <class _Sender, class _Receiver>
-      using __new_sender_t = decltype(__declval<__self_t<_Sender, _Receiver>&>().transform_sender_(
-        __declval<_Sender>(),
-        __declval<__current_scheduler_t<_Receiver>>()));
+      using __new_sender_t = //
+        decltype(__declval<__self_t<_Sender, _Receiver>&>().transform_sender_(
+          __declval<_Sender>(),
+          __declval<__current_scheduler_t<_Receiver>>()));
 
       template <class _Sender>
       using __on_sender_t = __copy_cvref_t<_Sender, __start_on_t<_Sender, _Scheduler>>;
@@ -198,9 +199,10 @@ namespace exec {
       }
 
       template <class _Sender, class _Receiver>
-      using __new_sender_t = decltype(__declval<__self_t<_Sender, _Receiver>&>().transform_sender_(
-        __declval<_Sender>(),
-        __declval<__current_scheduler_t<_Receiver>>()));
+      using __new_sender_t = //
+        decltype(__declval<__self_t<_Sender, _Receiver>&>().transform_sender_(
+          __declval<_Sender>(),
+          __declval<__current_scheduler_t<_Receiver>>()));
 
       template <class _Sender>
       using __on_sender_t = __copy_cvref_t<_Sender, __continue_on_t<_Sender, _Scheduler, _Closure>>;

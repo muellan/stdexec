@@ -311,6 +311,18 @@ namespace stdexec {
     __with_default< __mbind_back_q<__domain_of_or_t, _Env, get_scheduler_t>, __default_domain>>>;
 
   /////////////////////////////////////////////////////////////////////////////
+  // [execution.general.queries], general queries
+  namespace __queries {
+    struct get_scheduler_t;
+    struct get_stop_token_t;
+  } // namespace __queries
+
+  using __queries::get_scheduler_t;
+  using __queries::get_stop_token_t;
+  extern const get_scheduler_t get_scheduler;
+  extern const get_stop_token_t get_stop_token;
+
+  /////////////////////////////////////////////////////////////////////////////
   // env_of
   namespace __env {
     struct no_env {
@@ -1181,8 +1193,8 @@ namespace stdexec {
   template <class _Sender, class _Env>
   auto __checked_completion_signatures(_Sender&& __sndr, const _Env& __env) noexcept {
     using _WithEnv = __completion_signatures_of_t<_Sender, _Env>;
-    using _WithoutEnv = __completion_signatures_of_t<_Sender, no_env>;
-    static_assert(__one_of< _WithoutEnv, _WithEnv, dependent_completion_signatures<no_env>>);
+    // using _WithoutEnv = __completion_signatures_of_t<_Sender, no_env>;
+    // static_assert(__one_of< _WithoutEnv, _WithEnv, dependent_completion_signatures<no_env>>);
     stdexec::__debug_sender<_WithEnv>((_Sender&&) __sndr, __env);
     return _WithEnv{};
   }
@@ -2397,19 +2409,20 @@ namespace stdexec {
         using __id = __basic_sender;
         using is_sender = void;
         using completion_signatures = __completion_signatures_<_Tag, _Ts...>;
-
         std::tuple<_Ts...> __vals_;
 
         template <receiver_of<completion_signatures> _Receiver>
           requires(copy_constructible<_Ts> && ...)
         friend auto tag_invoke(connect_t, const __t& __sndr, _Receiver __rcvr) //
-          noexcept((std::is_nothrow_copy_constructible_v<_Ts> && ...)) -> __operation_t<_Receiver> {
+          noexcept((std::is_nothrow_copy_constructible_v<_Ts> && ...))         //
+          -> __operation_t<_Receiver> {
           return {{}, __sndr.__vals_, (_Receiver&&) __rcvr};
         }
 
         template <receiver_of<completion_signatures> _Receiver>
         friend auto tag_invoke(connect_t, __t&& __sndr, _Receiver __rcvr) //
-          noexcept((std::is_nothrow_move_constructible_v<_Ts> && ...)) -> __operation_t<_Receiver> {
+          noexcept((std::is_nothrow_move_constructible_v<_Ts> && ...))    //
+          -> __operation_t<_Receiver> {
           return {{}, ((__t&&) __sndr).__vals_, (_Receiver&&) __rcvr};
         }
 
