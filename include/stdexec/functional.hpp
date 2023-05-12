@@ -113,10 +113,16 @@ namespace stdexec {
         return tag_invoke((_Tag&&) __tag, (_Args&&) __args...);
       }
     };
+
   } // namespace __tag_invoke
 
   using __tag_invoke::tag_invoke_t;
-  inline constexpr tag_invoke_t tag_invoke{};
+
+  namespace __ti {
+    inline constexpr tag_invoke_t tag_invoke{};
+  }
+
+  using namespace __ti;
 
   template <auto& _Tag>
   using tag_t = __decay_t<decltype(_Tag)>;

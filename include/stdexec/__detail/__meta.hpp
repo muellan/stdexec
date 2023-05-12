@@ -81,8 +81,8 @@ namespace stdexec {
   template <class _Tp, class _Up>
   using __mfirst = _Tp;
 
-  template <class _Tp, class _UXp>
-  using __msecond = _UXp;
+  template <class _Tp, class _Up>
+  using __msecond = _Up;
 
   template <class _Tp>
   extern const __undefined<_Tp> __v;
@@ -657,6 +657,51 @@ namespace stdexec {
   template <class _Fun, class... _As>
   using __call_result_t = decltype(__declval<_Fun>()(__declval<_As>()...));
 #endif
+
+  template <auto _FunPtr>
+  struct __mimpl : __call_result_t<decltype(*_FunPtr)> { };
+
+// nvc++ is too clever and puts the lambda return type in the diagnostic
+// unless we further obfuscate it.
+#ifdef __NVCOMPILER
+  template <
+    class _Ty,
+    auto _Xp =
+      [](auto __x) {
+        using _ = decltype(__x);
+        return []() {
+          return _();
+        };
+      }(__mtype<_Ty>())>
+  extern __mimpl<(decltype(_Xp)*) 0> __hide_;
+#else
+  template <class _Ty>
+  extern __mimpl<(decltype([] { return __mtype<_Ty>{}; })*) 0> __hide_;
+#endif
+
+  template <class _Ty>
+  using __hide = decltype(__hide_<_Ty>);
+
+  template <class _Ty>
+  using __unhide = __t<_Ty>;
+
+  // #ifdef __NVCOMPILER
+  //   template <class _Ty,
+  //     auto _Xp = [](auto x){
+  //       using _ = decltype(x);
+  //       return []{return _();};
+  //     }(type<_Ty>())>
+  //   extern decltype(_Xp) hide_;
+  // #else
+  //   template <class _Ty>
+  //   extern decltype([]{return __mtype<_Ty>();}) __hide_;
+  // #endif
+
+  //   template <class _Ty>
+  //   using __unhide = typename __call_result_t<_Ty>::__t;
+
+  //   template <class _Ty>
+  //   using __hide = decltype(__hide_<_Ty>);
 
   // For working around clang's lack of support for CWG#2369:
   // http://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#2369

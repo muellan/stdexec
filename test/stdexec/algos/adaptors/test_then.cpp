@@ -195,7 +195,7 @@ TEST_CASE("then can be customized early", "[adaptors][then]") {
   wait_for_value(std::move(snd), std::string{"hallo"});
 }
 
-struct my_domain {};
+struct my_domain { };
 
 template <class Sender, class Env>
 auto tag_invoke(ex::sender_transform_t, my_domain, Sender snd, const Env&) {
@@ -206,8 +206,9 @@ TEST_CASE("then can be customized late", "[adaptors][then]") {
   // The customization will return a different value
   basic_inline_scheduler<my_domain> sched;
   auto snd = ex::just(std::string{"hello"})
-           | exec::on(sched, //
-                      ex::then([](std::string x) { return x + ", world"; }))
+           | exec::on(
+               sched, //
+               ex::then([](std::string x) { return x + ", world"; }))
            | exec::write(exec::with(ex::get_scheduler, inline_scheduler()));
   wait_for_value(std::move(snd), std::string{"hallo"});
 }
