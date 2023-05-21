@@ -132,6 +132,7 @@ namespace nvexec {
     };
 
     struct stream_receiver_base {
+      using is_receiver = void;
       constexpr static std::size_t memory_allocation_size = 0;
     };
 
