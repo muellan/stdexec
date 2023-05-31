@@ -40,6 +40,7 @@ namespace nvexec {
           file_name,
           line,
           cudaGetErrorString(error));
+        std::fflush(stdout);
       }
 #endif
 
